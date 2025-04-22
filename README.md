@@ -15,9 +15,7 @@
   
 ## Screenshots
 
-| ![ezgif-3-82fd6eedda](https://github.com/Lyall/MGS2-Dogtag-Restoration/assets/695941/b01453c7-b4ee-4903-bd34-340371873ecb) |
-|:--:|
-| Metal Gear Solid 2 |
+![2131640_20250421235818_1](https://github.com/user-attachments/assets/de7b1e57-ae94-46fe-bb59-4619e81ea010)
 
 
 ## Credits
