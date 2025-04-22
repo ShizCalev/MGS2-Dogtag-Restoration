@@ -8,17 +8,24 @@
 #include <spdlog/sinks/base_sink.h>
 #include <safetyhook.hpp>
 
+#include "logging.hpp"
+#include "version.h"
+#include "version_checking.hpp"
+
 HMODULE baseModule = GetModuleHandle(NULL);
 
 // Version
-string sFixName = "MGS2-Dogtag-Restoration";
-string sFixVer = "1.0.0";
+std::string sFixName = FIX_NAME;
+std::string sFixVer = VERSION_STRING;
 
 // Logger
 std::shared_ptr<spdlog::logger> logger;
 std::string sLogFile = sFixName + ".log";
 std::filesystem::path sExePath;
 std::string sExeName;
+
+bool bShouldCheckForUpdates;
+bool bConsoleUpdateNotifications;
 
 // Ini
 inipp::Ini<char> ini;
@@ -59,113 +66,21 @@ const std::map<MgsGame, GameInfo> kGames = {
 const GameInfo* game = nullptr;
 MgsGame eGameType = MgsGame::Unknown;
 
-#pragma region Logging
-
-#pragma region Spdlog sink
-// Spdlog sink (truncate on startup, single file)
-template<typename Mutex>
-class size_limited_sink : public spdlog::sinks::base_sink<Mutex> {
-public:
-    explicit size_limited_sink(const std::string& filename, size_t max_size)
-        : _filename(filename), _max_size(max_size) {
-        truncate_log_file();
-
-        _file.open(_filename, std::ios::app);
-        if (!_file.is_open()) {
-            throw spdlog::spdlog_ex("Failed to open log file " + filename);
-        }
-    }
-
-protected:
-    void sink_it_(const spdlog::details::log_msg& msg) override {
-        if (std::filesystem::exists(_filename) && std::filesystem::file_size(_filename) >= _max_size) {
-            return;
-        }
-
-        spdlog::memory_buf_t formatted;
-        this->formatter_->format(msg, formatted);
-
-        _file.write(formatted.data(), formatted.size());
-        _file.flush();
-    }
-
-    void flush_() override {
-        _file.flush();
-    }
-
-private:
-    std::ofstream _file;
-    std::string _filename;
-    size_t _max_size;
-
-    void truncate_log_file() {
-        if (std::filesystem::exists(_filename)) {
-            std::ofstream ofs(_filename, std::ofstream::out | std::ofstream::trunc);
-            ofs.close();
-        }
-    }
-};
-
-#pragma endregion Spdlog sink
-
-void Logging()
-{
-    // Get game name and exe path
-    WCHAR exePath[_MAX_PATH] = { 0 };
-    GetModuleFileNameW(baseModule, exePath, MAX_PATH);
-    sExePath = exePath;
-    sExeName = sExePath.filename().string();
-    sExePath = sExePath.remove_filename();
-
-    // spdlog initialisation
-    {
-        try {
-            if (!std::filesystem::is_directory("logs"))
-                std::filesystem::create_directory("logs"); //create a "logs" subdirectory in the game folder to keep the main directoy tidy.
-            // Create 10MB truncated logger
-            logger = std::make_shared<spdlog::logger>(sLogFile, std::make_shared<size_limited_sink<std::mutex>>(sExePath.string() + "logs\\" + sLogFile, 10 * 1024 * 1024));
-            spdlog::set_default_logger(logger);
-
-            spdlog::flush_on(spdlog::level::debug);
-            spdlog::info("----------");
-            spdlog::info("{} v{} loaded.", sFixName.c_str(), sFixVer.c_str());
-            spdlog::info("----------");
-            spdlog::info("Log file: {}", sExePath.string() + "logs\\" + sLogFile);
-            spdlog::info("----------");
-
-            // Log module details
-            spdlog::info("Module Name: {0:s}", sExeName.c_str());
-            spdlog::info("Module Path: {0:s}", sExePath.string());
-            spdlog::info("Module Address: 0x{0:x}", (uintptr_t)baseModule);
-            spdlog::info("Module Timestamp: {0:d}", Memory::ModuleTimestamp(baseModule));
-            spdlog::info("----------");
-        }
-        catch (const spdlog::spdlog_ex& ex) {
-            AllocConsole();
-            FILE* dummy;
-            freopen_s(&dummy, "CONOUT$", "w", stdout);
-            std::cout << "Log initialisation failed: " << ex.what() << std::endl;
-            FreeLibraryAndExitThread(baseModule, 1);
-        }
-    }
-}
-#pragma endregion Logging
-
 static void ReadConfig()
 {
     // Initialise config
-    std::ifstream iniFile(sExePath.string() + sConfigFile);
+    std::ifstream iniFile((sExePath/ sFixPath / sConfigFile).string());
     if (!iniFile) {
         AllocConsole();
         FILE* dummy;
         freopen_s(&dummy, "CONOUT$", "w", stdout);
         std::cout << "" << sFixName.c_str() << " v" << sFixVer.c_str() << " loaded." << std::endl;
         std::cout << "ERROR: Could not locate config file." << std::endl;
-        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sExePath.string().c_str() << std::endl;
+        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sExePath / sFixPath << std::endl;
         FreeLibraryAndExitThread(baseModule, 1);
     }
     else {
-        spdlog::info("Config file: {}", sExePath.string() + sConfigFile);
+        spdlog::info("Config file: {}", (sExePath / sFixPath / sConfigFile).string());
         ini.parse(iniFile);
     }
 
@@ -182,6 +97,18 @@ static void ReadConfig()
     inipp::get_value(ini.sections["Settings"], "custom_sex", custom_sex);
     inipp::get_value(ini.sections["Settings"], "blood_type", blood_type);
     inipp::get_value(ini.sections["Settings"], "year_of_birth", year_of_birth);
+	
+	inipp::get_value(ini.sections["Update Notifications"], "CheckForUpdates", bShouldCheckForUpdates);
+	inipp::get_value(ini.sections["Update Notifications"], "ConsoleNotifications", bConsoleUpdateNotifications);
+
+	spdlog::info("[Config] bShouldCheckForUpdates: {}", bShouldCheckForUpdates);
+	spdlog::info("[Config] bConsoleUpdateNotifications: {}", bConsoleUpdateNotifications);
+
+    inipp::get_value(ini.sections["Update Notifications"], "CheckForUpdates", bShouldCheckForUpdates);
+    inipp::get_value(ini.sections["Update Notifications"], "ConsoleNotifications", bConsoleUpdateNotifications);
+
+    spdlog::info("[Config] bShouldCheckForUpdates: {}", bShouldCheckForUpdates);
+    spdlog::info("[Config] bConsoleUpdateNotifications: {}", bConsoleUpdateNotifications);
 
     if (name_field.length()) {
         pNameField = name_field;
@@ -254,21 +181,21 @@ static void dogtagHooks()
 
 
     static SafetyHookMid DOGTAG_CODENAMEHook{}; //code name
-    DOGTAG_CODENAMEHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 41 B8"),
+    DOGTAG_CODENAMEHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 41 B8", "codename"),
         [](SafetyHookContext& ctx)
         {
             ctx.rdx = reinterpret_cast<uintptr_t>(pNameField.c_str());
         });
 
     static SafetyHookMid DOGTAG_SEXHook{};
-    DOGTAG_SEXHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 4C 8B 05"), //SEX
+    DOGTAG_SEXHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? 4C 8B 05", "sex 1"), //SEX
         [](SafetyHookContext& ctx)
         {
             ctx.rdx = reinterpret_cast<uintptr_t>(&"Sex                Blood");
         });
 
     static SafetyHookMid DOGTAG_YEARHook{}; //year
-    DOGTAG_YEARHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "48 8D 4C 24 ?? 44 8B 88"),
+    DOGTAG_YEARHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "48 8D 4C 24 ?? 44 8B 88", "year 1"),
         [](SafetyHookContext& ctx)
         {
             std::string finalString = "%02d/%02d/";
@@ -277,7 +204,7 @@ static void dogtagHooks()
         });
 
     static SafetyHookMid DOGTAG_sexHook{}; //sex
-    DOGTAG_sexHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 45 8B C5 C7 87"),
+    DOGTAG_sexHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 45 8B C5 C7 87", "sex"),
         [](SafetyHookContext& ctx)
         {
             std::string sex = pCustomsex.length() ? pCustomsex : reinterpret_cast<const char*>(ctx.r8);
@@ -311,7 +238,7 @@ static void dogtagHooks()
         });
 
     static SafetyHookMid DOGTAG_NATIONALITYHook{}; //Nation
-    DOGTAG_NATIONALITYHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 0F BE 44 24 ?? 48 8D 4C 24 ?? 45 8B C7"), //year
+    DOGTAG_NATIONALITYHook = safetyhook::create_mid(Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? 0F BE 44 24 ?? 48 8D 4C 24 ?? 45 8B C7", "Year"), //year
         [](SafetyHookContext& ctx)
         {
             if (!pCustomNation.length()) {
@@ -361,17 +288,33 @@ static void dogtagHooks()
 
 #pragma region HookInit
 
+
+static void CheckForUpdates()
+{
+    if (!bShouldCheckForUpdates)
+    {
+        spdlog::info("Mod update checking disabled via config.");
+        return;
+    }
+    const std::filesystem::path cacheFilePath = (sExePath / "mgs2_savedata_win" / (sFixName + "_version_check.txt"));
+    LatestVersionChecker checker(cacheFilePath);
+    checker.checkForUpdates();
+}
+
 std::mutex mainThreadFinishedMutex;
 std::condition_variable mainThreadFinishedVar;
 bool mainThreadFinished = false;
 
 static DWORD __stdcall Main(void*)
 {
-    Logging();
+    Logging::Initialize();
     if (DetectGame())
     {
         ReadConfig();
         dogtagHooks();
+		
+        CheckForUpdates();
+
     }
 
     // Signal any threads which might be waiting for us before continuing
@@ -395,18 +338,19 @@ void* __cdecl memset_Hook(void* Dst, int Val, size_t Size)
     {
         memsetHookCalled = true;
 
-        // First we'll unhook the IAT for this function as early as we can
-        Memory::HookIAT(baseModule, "VCRUNTIME140.dll", memset_Hook, memset_Fn);
+        // Unhook ourselves: restore previous pointer
+        Memory::WriteIAT(baseModule, "VCRUNTIME140.dll", "memset", memset_Fn);
 
-        // Wait for our main thread to finish before we return to the game
-        if (!mainThreadFinished)
-        {
-            std::unique_lock finishedLock(mainThreadFinishedMutex);
-            mainThreadFinishedVar.wait(finishedLock, [] { return mainThreadFinished; });
-        }
+        // Wait for main thread to finish initialization
+        std::unique_lock finishedLock(mainThreadFinishedMutex);
+        mainThreadFinishedVar.wait(finishedLock, []
+            {
+                return mainThreadFinished;
+            });
     }
 
-    return memset_Fn(Dst, Val, Size);
+    // Call the previous memset (whatever was there when we hooked)
+    return reinterpret_cast<decltype(memset_Fn)>(memset_Fn)(Dst, Val, Size);
 }
 
 BOOL APIENTRY DllMain( HMODULE hModule,
@@ -423,8 +367,10 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         HMODULE vcruntime140 = GetModuleHandleA("VCRUNTIME140.dll");
         if (vcruntime140)
         {
-            memset_Fn = decltype(memset_Fn)(GetProcAddress(vcruntime140, "memset"));
-            Memory::HookIAT(baseModule, "VCRUNTIME140.dll", memset_Fn, memset_Hook);
+            // Read whatever is currently in IAT for memset (in case another mod is already hooking it!)
+            void* currentIATMemset = Memory::ReadIAT(baseModule, "VCRUNTIME140.dll", "memset");
+            memset_Fn = reinterpret_cast<decltype(memset_Fn)>(currentIATMemset);
+            Memory::WriteIAT(baseModule, "VCRUNTIME140.dll", "memset", &memset_Hook);
         }
 
         HANDLE mainHandle = CreateThread(NULL, 0, Main, 0, NULL, 0);

@@ -1,5 +1,7 @@
 # Metal Gear Solid 2 - Master Collection Dogtag Restoration
 
+Also avaiaible on NexusMods [here.](https://www.nexusmods.com/metalgearsolid2mc/mods/94)
+
 
 ## Features
 - Restores the original Blood & Year of Birth dogtag fields and "Name" title (changed to "Code Name" in the HD Collection.)
