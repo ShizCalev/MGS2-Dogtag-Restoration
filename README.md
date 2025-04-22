@@ -9,7 +9,6 @@
 
 ## Installation
 
-- Install MGSHDFix from [here.](https://github.com/Lyall/MGSHDFix)
 - Grab the latest release of MGS2-Dogtag-Restoration from [here.](https://github.com/ShizCalev/MGS2-Dogtag-Restoration/releases)
 - Extract the contents of the release zip in to the the game folder.<br />(e.g. "**steamapps\common\MGS2**" for Steam).
 
