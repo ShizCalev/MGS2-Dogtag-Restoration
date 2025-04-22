@@ -92,7 +92,6 @@
     <TargetExt>.asi</TargetExt>
     <ExternalIncludePath>external\inipp;external\spdlog\include;external\safetyhook;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <OutDir>G:\Steam\steamapps\common\MGS2\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetExt>.asi</TargetExt>
