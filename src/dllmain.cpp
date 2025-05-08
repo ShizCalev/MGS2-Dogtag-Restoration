@@ -122,8 +122,15 @@ void Logging()
     std::string paths[4] = { "", "plugins\\", "scripts\\", "update\\" };
     for (int i = 0; i < (sizeof(paths) / sizeof(paths[0])); i++) {
         if (std::filesystem::exists(sExePath.string() + paths[i] + sFixName + ".asi")) {
+            if (sFixPath.length()) { //multiple versions found
+                AllocConsole();
+                FILE* dummy;
+                freopen_s(&dummy, "CONOUT$", "w", stdout);
+                std::cout << "\n" << sFixName + " ERROR: Duplicate .asi installations found! Please make sure to delete any old versions!" << std::endl;
+                FreeLibraryAndExitThread(baseModule, 1);
+                return;
+            }
             sFixPath = paths[i];
-            break;
         }
     }
     // spdlog initialisation
