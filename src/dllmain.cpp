@@ -12,13 +12,15 @@ HMODULE baseModule = GetModuleHandle(NULL);
 
 // Version
 string sFixName = "MGS2-Dogtag-Restoration";
-string sFixVer = "1.0.0";
+string sFixVer = "1.0.1";
 
 // Logger
 std::shared_ptr<spdlog::logger> logger;
 std::string sLogFile = sFixName + ".log";
 std::filesystem::path sExePath;
 std::string sExeName;
+std::string sFixPath;
+
 
 // Ini
 inipp::Ini<char> ini;
@@ -117,11 +119,18 @@ void Logging()
     sExeName = sExePath.filename().string();
     sExePath = sExePath.remove_filename();
 
+    std::string paths[4] = { "", "plugins\\", "scripts\\", "update\\" };
+    for (int i = 0; i < (sizeof(paths) / sizeof(paths[0])); i++) {
+        if (std::filesystem::exists(sExePath.string() + paths[i] + sFixName + ".asi")) {
+            sFixPath = paths[i];
+            break;
+        }
+    }
     // spdlog initialisation
     {
         try {
-            if (!std::filesystem::is_directory("logs"))
-                std::filesystem::create_directory("logs"); //create a "logs" subdirectory in the game folder to keep the main directoy tidy.
+            if (!std::filesystem::is_directory(sExePath.string() + "logs"))
+                std::filesystem::create_directory(sExePath.string() + "logs"); //create a "logs" subdirectory in the game folder to keep the main directoy tidy.
             // Create 10MB truncated logger
             logger = std::make_shared<spdlog::logger>(sLogFile, std::make_shared<size_limited_sink<std::mutex>>(sExePath.string() + "logs\\" + sLogFile, 10 * 1024 * 1024));
             spdlog::set_default_logger(logger);
@@ -129,6 +138,8 @@ void Logging()
             spdlog::flush_on(spdlog::level::debug);
             spdlog::info("----------");
             spdlog::info("{} v{} loaded.", sFixName.c_str(), sFixVer.c_str());
+            spdlog::info("ASI plugin location: {}", sExePath.string() + sFixPath + sFixName + ".asi");
+
             spdlog::info("----------");
             spdlog::info("Log file: {}", sExePath.string() + "logs\\" + sLogFile);
             spdlog::info("----------");
@@ -154,18 +165,18 @@ void Logging()
 static void ReadConfig()
 {
     // Initialise config
-    std::ifstream iniFile(sExePath.string() + sConfigFile);
+    std::ifstream iniFile(sExePath.string() + sFixPath + sConfigFile);
     if (!iniFile) {
         AllocConsole();
         FILE* dummy;
         freopen_s(&dummy, "CONOUT$", "w", stdout);
         std::cout << "" << sFixName.c_str() << " v" << sFixVer.c_str() << " loaded." << std::endl;
         std::cout << "ERROR: Could not locate config file." << std::endl;
-        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sExePath.string().c_str() << std::endl;
+        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sExePath.string().c_str() + sFixPath << std::endl;
         FreeLibraryAndExitThread(baseModule, 1);
     }
     else {
-        spdlog::info("Config file: {}", sExePath.string() + sConfigFile);
+        spdlog::info("Config file: {}", sExePath.string() + sFixPath + sConfigFile);
         ini.parse(iniFile);
     }
 
