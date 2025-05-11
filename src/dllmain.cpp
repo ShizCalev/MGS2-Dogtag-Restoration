@@ -119,10 +119,13 @@ void Logging()
     sExeName = sExePath.filename().string();
     sExePath = sExePath.remove_filename();
 
-    std::string paths[4] = { "", "plugins\\", "scripts\\", "update\\" };
-    for (int i = 0; i < (sizeof(paths) / sizeof(paths[0])); i++) {
-        if (std::filesystem::exists(sExePath.string() + paths[i] + sFixName + ".asi")) {
-            if (sFixPath.length()) { //multiple versions found
+    std::string paths[4] = { "\\", "plugins\\", "scripts\\", "update\\" };
+    for (int i = 0; i < (sizeof(paths) / sizeof(paths[0])); i++) 
+    {
+        if (std::filesystem::exists(sExePath.string() + paths[i] + sFixName + ".asi")) 
+        {
+            if (!sFixPath.empty()) //multiple versions found
+            { 
                 AllocConsole();
                 FILE* dummy;
                 freopen_s(&dummy, "CONOUT$", "w", stdout);
