@@ -362,6 +362,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH:
     {
+        DisableThreadLibraryCalls(hModule); // Disable DLL_THREAD_ATTACH and DLL_THREAD_DETACH calls, we don't need them
         // Try hooking IAT of one of the imports game calls early on, so we can make it wait for our Main thread to complete before returning back to game
         // This will only hook the main game modules usage of memset, other modules calling it won't be affected
         HMODULE vcruntime140 = GetModuleHandleA("VCRUNTIME140.dll");
